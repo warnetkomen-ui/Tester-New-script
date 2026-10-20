@@ -1,7 +1,7 @@
 --[[
     Antibys Universal
-    Features: Steal/Clone, Aimbot, ESP (Names/Tracers/Chams), Self Mods
-    by Antibys team
+    Features: Grab (Anti-Bring), Aimbot, ESP, Self Mods
+    UI: Rayfield
 ]]
 
 local Players = game:GetService("Players")
@@ -38,7 +38,7 @@ local Settings = {
     }
 }
 
--- ===== HELPER: KEYBIND =====
+-- ===== HELPER =====
 local function matchKeybind(Input, targetKey)
     if not targetKey then return false end
     if typeof(targetKey) == "EnumItem" then
@@ -50,7 +50,6 @@ local function matchKeybind(Input, targetKey)
     return false
 end
 
--- ===== HELPER: WALL CHECK =====
 local function IsVisible(targetPart)
     local Origin = Camera.CFrame.Position
     local Direction = (targetPart.Position - Origin).Unit * (targetPart.Position - Origin).Magnitude
@@ -63,7 +62,7 @@ local function IsVisible(targetPart)
     return Result == nil or Result.Instance:IsDescendantOf(targetPart.Parent)
 end
 
--- ===== AIMBOT CORE =====
+-- ===== AIMBOT =====
 local function GetClosestPlayer()
     local Closest, MaxDist = nil, Settings.Aimbot.FOV
     for _, v in pairs(Players:GetPlayers()) do
@@ -82,7 +81,6 @@ local function GetClosestPlayer()
     return Closest
 end
 
--- FOV Circle
 local DrawingSupported = (typeof(Drawing) == "table" or typeof(Drawing) == "userdata") and Drawing.new
 local FOVCircle = nil
 if DrawingSupported then
@@ -103,7 +101,6 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
     end
 end))
 
--- Aimbot Loop
 table.insert(Connections, RunService.RenderStepped:Connect(function()
     if Settings.Aimbot.Enabled and Aiming then
         local TargetPart = GetClosestPlayer()
@@ -125,7 +122,6 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
     end
 end))
 
--- Keybind Aimbot
 table.insert(Connections, UserInputService.InputBegan:Connect(function(I)
     if matchKeybind(I, Settings.Aimbot.Key) then Aiming = true end
 end))
@@ -133,23 +129,17 @@ table.insert(Connections, UserInputService.InputEnded:Connect(function(I)
     if matchKeybind(I, Settings.Aimbot.Key) then Aiming = false end
 end))
 
--- ===== ESP ENGINE =====
+-- ===== ESP =====
 local function CreateESP(player)
     if ESP_Cache[player] then return end
     local cache = {}
     if DrawingSupported then
         pcall(function()
-            cache.Name = Drawing.new("Text")
-            cache.Name.Center = true; cache.Name.Outline = true
-            cache.Name.Visible = false
-            
-            cache.Tracer = Drawing.new("Line")
-            cache.Tracer.Visible = false
+            cache.Name = Drawing.new("Text"); cache.Name.Center = true; cache.Name.Outline = true; cache.Name.Visible = false
+            cache.Tracer = Drawing.new("Line"); cache.Tracer.Visible = false
         end)
     end
-    local highlight = Instance.new("Highlight")
-    highlight.Enabled = false
-    highlight.Parent = game.CoreGui
+    local highlight = Instance.new("Highlight"); highlight.Enabled = false; highlight.Parent = game.CoreGui
     cache.Highlight = highlight
     ESP_Cache[player] = cache
 end
@@ -183,90 +173,76 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
                         local headPos = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 1.5, 0))
                         
                         local col = Settings.Visuals.TextColor
-                        if Settings.Visuals.ColorMode == "Health" then
-                            col = Color3.fromHSV((hum.Health/hum.MaxHealth)*0.3, 1, 1)
-                        elseif Settings.Visuals.ColorMode == "Team" and p.Team then
-                            col = p.TeamColor.Color
-                        end
+                        if Settings.Visuals.ColorMode == "Health" then col = Color3.fromHSV((hum.Health/hum.MaxHealth)*0.3, 1, 1)
+                        elseif Settings.Visuals.ColorMode == "Team" and p.Team then col = p.TeamColor.Color end
                         
-                        -- Name ESP
                         if Settings.Visuals.Names and onScreen and cache.Name then
-                            cache.Name.Visible = true
-                            cache.Name.Text = p.Name
-                            cache.Name.Color = col
-                            cache.Name.Size = Settings.Visuals.TextSize
-                            cache.Name.Position = Vector2.new(headPos.X, headPos.Y)
+                            cache.Name.Visible = true; cache.Name.Text = p.Name; cache.Name.Color = col
+                            cache.Name.Size = Settings.Visuals.TextSize; cache.Name.Position = Vector2.new(headPos.X, headPos.Y)
                         elseif cache.Name then cache.Name.Visible = false end
                         
-                        -- Tracer ESP
                         if Settings.Visuals.Tracers and onScreen and cache.Tracer then
-                            cache.Tracer.Visible = true
-                            cache.Tracer.Color = col
-                            cache.Tracer.Thickness = Settings.Visuals.TracerThickness
+                            cache.Tracer.Visible = true; cache.Tracer.Color = col; cache.Tracer.Thickness = Settings.Visuals.TracerThickness
                             local origin = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y)
                             if Settings.Visuals.TracerOrigin == "Center" then origin = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
                             elseif Settings.Visuals.TracerOrigin == "Mouse" then origin = UserInputService:GetMouseLocation() end
-                            cache.Tracer.From = origin
-                            cache.Tracer.To = Vector2.new(screenPos.X, screenPos.Y)
+                            cache.Tracer.From = origin; cache.Tracer.To = Vector2.new(screenPos.X, screenPos.Y)
                         elseif cache.Tracer then cache.Tracer.Visible = false end
                         
-                        -- Chams
                         if Settings.Visuals.Chams then
-                            cache.Highlight.Enabled = true
-                            cache.Highlight.Adornee = char
-                            cache.Highlight.FillColor = col
-                            cache.Highlight.OutlineColor = Settings.Visuals.ChamsOutlineColor
-                            cache.Highlight.FillTransparency = Settings.Visuals.ChamsFillTransparency
-                            cache.Highlight.OutlineTransparency = Settings.Visuals.ChamsOutlineTransparency
+                            cache.Highlight.Enabled = true; cache.Highlight.Adornee = char
+                            cache.Highlight.FillColor = col; cache.Highlight.OutlineColor = Settings.Visuals.ChamsOutlineColor
+                            cache.Highlight.FillTransparency = Settings.Visuals.ChamsFillTransparency; cache.Highlight.OutlineTransparency = Settings.Visuals.ChamsOutlineTransparency
                             cache.Highlight.DepthMode = Settings.Visuals.AlwaysOnTop and Enum.HighlightDepthMode.AlwaysOnTop or Enum.HighlightDepthMode.Occluded
-                        else
-                            cache.Highlight.Enabled = false
-                        end
+                        else cache.Highlight.Enabled = false end
                     else
                         if cache.Name then cache.Name.Visible = false end
                         if cache.Tracer then cache.Tracer.Visible = false end
                         cache.Highlight.Enabled = false
                     end
                 end
-            else
-                RemoveESP(p)
-            end
+            else RemoveESP(p) end
         end
     end
 end))
 
--- ===== STEAL & CLONE =====
-local function GrabToolInstant(tool)
+-- ===== GRAB TOOL (ANTI BRING) =====
+local function GrabToolSafe(tool)
     local char = LocalPlayer.Character
     local hrp = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
     local handle = tool:FindFirstChild("Handle")
-    if hrp and handle and firetouchinterest then
-        firetouchinterest(hrp, handle, 0)
-        task.wait()
-        firetouchinterest(hrp, handle, 1)
-        return
-    end
-    -- Fallback pindah langsung
-    tool.Parent = LocalPlayer:WaitForChild("Backpack")
-end
+    if not hrp or not handle then return false end
 
-local function CloneForceRun(toolObj)
-    local ok, clone = pcall(function() return toolObj:Clone() end)
-    if not ok or not clone then return false end
-    clone.Parent = LocalPlayer:WaitForChild("Backpack")
-    task.spawn(function()
-        clone.Equipped:Wait()
-        task.wait(0.1)
-        for _, obj in pairs(clone:GetDescendants()) do
-            if obj:IsA("LocalScript") then obj.Disabled = false
-            elseif obj:IsA("Script") then
-                pcall(function() obj.RunContext = Enum.RunContext.Client; obj.Disabled = false end)
-            end
+    -- 1. Metode utama: firetouchinterest (cuma sentuhan kilat)
+    if firetouchinterest then
+        pcall(function()
+            firetouchinterest(hrp, handle, 0)
+            task.wait()
+            firetouchinterest(hrp, handle, 1)
+        end)
+        return true
+    end
+
+    -- 2. Fallback: teleport instan tanpa nge-fling
+    local origCFrame = hrp.CFrame
+    local startTime = tick()
+    local steerConn = RunService.Stepped:Connect(function()
+        for _, part in pairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then part.CanCollide = false end
         end
     end)
+    
+    while tool.Parent ~= char and tool.Parent ~= LocalPlayer:FindFirstChild("Backpack") and (tick() - startTime < 0.5) do
+        hrp.CFrame = handle.CFrame
+        task.wait(0.01)
+    end
+    
+    steerConn:Disconnect()
+    hrp.CFrame = origCFrame -- balikin posisi
     return true
 end
 
+-- ===== SCAN =====
 local function ScanTools()
     allTools = {}; toolByName = {}
     local seen = {}
@@ -319,7 +295,6 @@ table.insert(Connections, UserInputService.JumpRequest:Connect(function()
     end
 end))
 
--- Fly
 table.insert(Connections, RunService.RenderStepped:Connect(function()
     if Settings.Self.Fly then
         local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -346,7 +321,7 @@ local Window = Rayfield:CreateWindow({
 
 -- Tab: Tools
 local ToolsTab = Window:CreateTab("Tools", "package")
-ToolsTab:CreateSection("Scan & Steal/Clone")
+ToolsTab:CreateSection("Scan & Grab")
 
 local ToolDropdown
 ToolDropdown = ToolsTab:CreateDropdown({
@@ -366,35 +341,22 @@ ToolsTab:CreateButton({
         local names = {}
         for name, _ in pairs(toolByName) do table.insert(names, name) end
         if #names == 0 then table.insert(names, "Tidak ada tool.") end
-        pcall(function()
-            if ToolDropdown.Refresh then ToolDropdown:Refresh(names, true) end
-        end)
+        pcall(function() if ToolDropdown.Refresh then ToolDropdown:Refresh(names, true) end end)
         selectedToolName = nil
         Rayfield:Notify({Title = "Scan", Content = ("Ditemukan %d tool."):format(#allTools), Duration = 3})
     end
 })
 
 ToolsTab:CreateButton({
-    Name = "STEAL (Damage Nyata)",
+    Name = "GRAB TOOL (Anti-Bring)",
     Callback = function()
-        if not selectedToolName then Rayfield:Notify({Title = "Error", Content = "Pilih tool dulu!", Duration = 2}) return end
-        local toolObj = toolByName[selectedToolName]
-        if toolObj and toolObj.Parent then
-            GrabToolInstant(toolObj)
-            Rayfield:Notify({Title = "Steal", Content = "Mencoba: " .. selectedToolName, Duration = 3})
-        else
-            Rayfield:Notify({Title = "Error", Content = "Tool hilang. Scan ulang.", Duration = 3})
+        if not selectedToolName or selectedToolName == "Klik SCAN dulu..." or selectedToolName == "Tidak ada tool." then
+            Rayfield:Notify({Title = "Error", Content = "Pilih tool dulu!", Duration = 2}) return
         end
-    end
-})
-
-ToolsTab:CreateButton({
-    Name = "CLONE (Lokal)",
-    Callback = function()
-        if not selectedToolName then Rayfield:Notify({Title = "Error", Content = "Pilih tool dulu!", Duration = 2}) return end
         local toolObj = toolByName[selectedToolName]
         if toolObj and toolObj.Parent then
-            if CloneForceRun(toolObj) then Rayfield:Notify({Title = "Clone", Content = "Cloned: " .. selectedToolName, Duration = 3}) end
+            GrabToolSafe(toolObj)
+            Rayfield:Notify({Title = "Grab", Content = "Mencoba ambil: " .. selectedToolName, Duration = 3})
         else
             Rayfield:Notify({Title = "Error", Content = "Tool hilang. Scan ulang.", Duration = 3})
         end
@@ -414,30 +376,27 @@ AimTab:CreateToggle({Name = "Show FOV", CurrentValue = true, Callback = function
 AimTab:CreateSlider({Name = "FOV Radius", Range = {10, 800}, Increment = 5, CurrentValue = 150, Callback = function(v) Settings.Aimbot.FOV = v end})
 AimTab:CreateColorPicker({Name = "FOV Color", Color = Color3.fromRGB(255,255,255), Callback = function(c) Settings.Aimbot.FOVColor = c end})
 
--- Tab: Visuals (ESP)
+-- Tab: Visuals
 local VisTab = Window:CreateTab("Visuals", "eye")
 VisTab:CreateSection("ESP Settings")
 VisTab:CreateToggle({Name = "ESP Enabled", CurrentValue = false, Callback = function(s) Settings.Visuals.Enabled = s end})
 VisTab:CreateDropdown({Name = "Color Mode", Options = {"Fixed", "Team", "Health"}, CurrentOption = {"Fixed"}, Callback = function(O) Settings.Visuals.ColorMode = O[1] end})
-
 VisTab:CreateSection("Name ESP")
 VisTab:CreateToggle({Name = "Show Names", CurrentValue = true, Callback = function(s) Settings.Visuals.Names = s end})
 VisTab:CreateSlider({Name = "Text Size", Range = {10, 24}, Increment = 1, CurrentValue = 14, Callback = function(v) Settings.Visuals.TextSize = v end})
 VisTab:CreateColorPicker({Name = "Text Color", Color = Color3.fromRGB(255,255,255), Callback = function(c) Settings.Visuals.TextColor = c end})
-
 VisTab:CreateSection("Tracer ESP")
 VisTab:CreateToggle({Name = "Show Tracers", CurrentValue = true, Callback = function(s) Settings.Visuals.Tracers = s end})
 VisTab:CreateDropdown({Name = "Tracer Origin", Options = {"Bottom", "Center", "Mouse"}, CurrentOption = {"Bottom"}, Callback = function(O) Settings.Visuals.TracerOrigin = O[1] end})
 VisTab:CreateSlider({Name = "Tracer Thickness", Range = {1, 5}, Increment = 1, CurrentValue = 1, Callback = function(v) Settings.Visuals.TracerThickness = v end})
 VisTab:CreateColorPicker({Name = "Tracer Color", Color = Color3.fromRGB(255,255,255), Callback = function(c) Settings.Visuals.TracerColor = c end})
-
 VisTab:CreateSection("Chams ESP")
 VisTab:CreateToggle({Name = "Show Chams", CurrentValue = true, Callback = function(s) Settings.Visuals.Chams = s end})
 VisTab:CreateToggle({Name = "Always On Top", CurrentValue = true, Callback = function(s) Settings.Visuals.AlwaysOnTop = s end})
 VisTab:CreateSlider({Name = "Fill Transparency", Range = {0, 10}, Increment = 1, CurrentValue = 5, Callback = function(v) Settings.Visuals.ChamsFillTransparency = v / 10 end})
 VisTab:CreateColorPicker({Name = "Chams Fill Color", Color = Color3.fromRGB(255,0,0), Callback = function(c) Settings.Visuals.ChamsFillColor = c end})
 
--- Tab: Self Mods
+-- Tab: Self
 local SelfTab = Window:CreateTab("Self Mods", "user")
 SelfTab:CreateSection("Movement")
 SelfTab:CreateSlider({Name = "WalkSpeed", Range = {16, 300}, Increment = 1, CurrentValue = 16, Callback = function(v) Settings.Self.WalkSpeed = v end})
@@ -447,4 +406,4 @@ SelfTab:CreateToggle({Name = "Noclip", CurrentValue = false, Callback = function
 SelfTab:CreateToggle({Name = "Fly", CurrentValue = false, Callback = function(s) Settings.Self.Fly = s end})
 SelfTab:CreateSlider({Name = "Fly Speed", Range = {10, 300}, Increment = 5, CurrentValue = 50, Callback = function(v) Settings.Self.FlySpeed = v end})
 
-Rayfield:Notify({Title = "Antibys Universal", Content = "Loaded. STEAL buat damage nyata, CLONE buat lokal.", Duration = 5})
+Rayfield:Notify({Title = "Antibys Universal", Content = "Menu siap. Scan & Grab Tool.", Duration = 5})
