@@ -1,6 +1,6 @@
 --[[
     Antibys Universal
-    Features: Grab (Anti-Bring), Aimbot, ESP, Self Mods
+    Features: Acivenna Utility Grabber, Aimbot, ESP, Self Mods
     UI: Rayfield
 ]]
 
@@ -17,6 +17,7 @@ local allTools = {}
 local toolByName = {}
 local selectedToolName = nil
 local Aiming = false
+local AutoStealActive = false
 local ESP_Cache = {}
 
 local Settings = {
@@ -206,41 +207,59 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
     end
 end))
 
--- ===== GRAB TOOL (ANTI BRING) =====
-local function GrabToolSafe(tool)
+-- ===== ACIVENNA TOOL GRABBER (100% COPY) =====
+local function GrabToolInstant(tool)
     local char = LocalPlayer.Character
-    local hrp = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
+    local hrp = char and char:FindFirstChild("HumanoidRootPart") or char and char.PrimaryPart
     local handle = tool:FindFirstChild("Handle")
-    if not hrp or not handle then return false end
-
-    -- 1. Metode utama: firetouchinterest (cuma sentuhan kilat)
-    if firetouchinterest then
-        pcall(function()
+    if hrp and handle then
+        if firetouchinterest then
             firetouchinterest(hrp, handle, 0)
             task.wait()
             firetouchinterest(hrp, handle, 1)
-        end)
-        return true
-    end
-
-    -- 2. Fallback: teleport instan tanpa nge-fling
-    local origCFrame = hrp.CFrame
-    local startTime = tick()
-    local steerConn = RunService.Stepped:Connect(function()
-        for _, part in pairs(char:GetDescendants()) do
-            if part:IsA("BasePart") then part.CanCollide = false end
+        else
+            local origCFrame = hrp.CFrame
+            local startTime = tick()
+            local steerConnection = RunService.Stepped:Connect(function()
+                for _, part in pairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
+                    end
+                end
+            end)
+            while tool.Parent ~= char and tool.Parent ~= LocalPlayer:FindFirstChild("Backpack") and (tick() - startTime < 0.5) do
+                hrp.CFrame = handle.CFrame
+                task.wait(0.01)
+            end
+            steerConnection:Disconnect()
+            hrp.CFrame = origCFrame
         end
-    end)
-    
-    while tool.Parent ~= char and tool.Parent ~= LocalPlayer:FindFirstChild("Backpack") and (tick() - startTime < 0.5) do
-        hrp.CFrame = handle.CFrame
-        task.wait(0.01)
     end
-    
-    steerConn:Disconnect()
-    hrp.CFrame = origCFrame -- balikin posisi
-    return true
 end
+
+-- Auto Steal Loop (Acivenna)
+task.spawn(function()
+    while true do
+        task.wait(0.3)
+        if AutoStealActive then
+            pcall(function()
+                local char = LocalPlayer.Character
+                if not char then return end
+                
+                for _, obj in pairs(Workspace:GetDescendants()) do
+                    if not AutoStealActive then break end
+                    if obj:IsA("Tool") and obj:FindFirstChild("Handle") then
+                        local parent = obj.Parent
+                        if parent == Workspace or parent:IsA("Folder") or (parent:IsA("Model") and not Players:GetPlayerFromCharacter(parent)) then
+                            GrabToolInstant(obj)
+                            task.wait(0.05)
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
 
 -- ===== SCAN =====
 local function ScanTools()
@@ -319,47 +338,42 @@ local Window = Rayfield:CreateWindow({
     ConfigurationSaving = {Enabled = false}, KeySystem = false
 })
 
--- Tab: Tools
+-- Tab: Tools (Acivenna Style)
 local ToolsTab = Window:CreateTab("Tools", "package")
-ToolsTab:CreateSection("Scan & Grab")
+ToolsTab:CreateSection("Tool Grabber")
 
-local ToolDropdown
-ToolDropdown = ToolsTab:CreateDropdown({
-    Name = "Select Tool",
-    Options = {"Klik SCAN dulu..."},
-    CurrentOption = {}, MultipleOptions = false,
-    Callback = function(Option)
-        selectedToolName = Option[1]
-        Rayfield:Notify({Title = "Selected", Content = tostring(selectedToolName), Duration = 2})
+ToolsTab:CreateButton({
+    Name = "Steal Tools Once",
+    Callback = function()
+        pcall(function()
+            local char = LocalPlayer.Character
+            if not char then return end
+            
+            local found = false
+            for _, obj in pairs(Workspace:GetDescendants()) do
+                if obj:IsA("Tool") and obj:FindFirstChild("Handle") then
+                    local parent = obj.Parent
+                    if parent == Workspace or parent:IsA("Folder") or (parent:IsA("Model") and not Players:GetPlayerFromCharacter(parent)) then
+                        found = true
+                        GrabToolInstant(obj)
+                    end
+                end
+            end
+            
+            if found then
+                Rayfield:Notify({Title = "Tool Stealer", Content = "Collected loose tools!", Duration = 3})
+            else
+                Rayfield:Notify({Title = "Tool Stealer", Content = "No loose tools found.", Duration = 3})
+            end
+        end)
     end
 })
 
-ToolsTab:CreateButton({
-    Name = "SCAN TOOLS",
-    Callback = function()
-        ScanTools()
-        local names = {}
-        for name, _ in pairs(toolByName) do table.insert(names, name) end
-        if #names == 0 then table.insert(names, "Tidak ada tool.") end
-        pcall(function() if ToolDropdown.Refresh then ToolDropdown:Refresh(names, true) end end)
-        selectedToolName = nil
-        Rayfield:Notify({Title = "Scan", Content = ("Ditemukan %d tool."):format(#allTools), Duration = 3})
-    end
-})
-
-ToolsTab:CreateButton({
-    Name = "GRAB TOOL (Anti-Bring)",
-    Callback = function()
-        if not selectedToolName or selectedToolName == "Klik SCAN dulu..." or selectedToolName == "Tidak ada tool." then
-            Rayfield:Notify({Title = "Error", Content = "Pilih tool dulu!", Duration = 2}) return
-        end
-        local toolObj = toolByName[selectedToolName]
-        if toolObj and toolObj.Parent then
-            GrabToolSafe(toolObj)
-            Rayfield:Notify({Title = "Grab", Content = "Mencoba ambil: " .. selectedToolName, Duration = 3})
-        else
-            Rayfield:Notify({Title = "Error", Content = "Tool hilang. Scan ulang.", Duration = 3})
-        end
+ToolsTab:CreateToggle({
+    Name = "Auto Steal Tools",
+    CurrentValue = false,
+    Callback = function(state)
+        AutoStealActive = state
     end
 })
 
@@ -406,4 +420,4 @@ SelfTab:CreateToggle({Name = "Noclip", CurrentValue = false, Callback = function
 SelfTab:CreateToggle({Name = "Fly", CurrentValue = false, Callback = function(s) Settings.Self.Fly = s end})
 SelfTab:CreateSlider({Name = "Fly Speed", Range = {10, 300}, Increment = 5, CurrentValue = 50, Callback = function(v) Settings.Self.FlySpeed = v end})
 
-Rayfield:Notify({Title = "Antibys Universal", Content = "Menu siap. Scan & Grab Tool.", Duration = 5})
+Rayfield:Notify({Title = "Antibys Universal", Content = "Menu siap. Steal Tools Once / Auto Steal.", Duration = 5})
