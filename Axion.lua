@@ -1,6 +1,6 @@
 --[[
     Antibys Universal
-    Features: Acivenna Utility (100% Original), Aimbot, ESP, Self Mods
+    Features: Acivenna Utility, Aimbot (Fixed + Team Check + Lock), ESP, Self Mods (Fixed Fly)
     UI: Rayfield
 ]]
 
@@ -11,17 +11,20 @@ local UserInputService = game:GetService("UserInputService")
 local Camera = Workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
--- ===== STATE (Kita punya) =====
+-- ===== STATE =====
 local Connections = {}
 local Aiming = false
 local AutoStealActive = false
 local ESP_Cache = {}
+local FlyBodyVelocity = nil
 
 local Settings = {
     Aimbot = {
         Enabled = false, Method = "Camera", Key = Enum.UserInputType.MouseButton2,
         TargetPart = "Head", WallCheck = true, Smoothness = 2, InstantSnap = false,
-        ShowFOV = true, FOV = 150, FOVColor = Color3.fromRGB(255, 255, 255), FOVThickness = 1
+        ShowFOV = true, FOV = 150, FOVColor = Color3.fromRGB(255, 255, 255), FOVThickness = 1,
+        TeamCheck = true, -- BARU: biar tim sendiri gak ke-lock
+        Lock = true       -- BARU: biar target gak lepas saat ditahan
     },
     Visuals = {
         Enabled = false, Names = true, Tracers = true, Chams = true,
@@ -36,7 +39,7 @@ local Settings = {
     }
 }
 
--- ===== HELPER (Kita punya) =====
+-- ===== HELPER =====
 local function matchKeybind(Input, targetKey)
     if not targetKey then return false end
     if typeof(targetKey) == "EnumItem" then
@@ -60,18 +63,26 @@ local function IsVisible(targetPart)
     return Result == nil or Result.Instance:IsDescendantOf(targetPart.Parent)
 end
 
--- ===== AIMBOT (Kita punya) =====
+-- ===== AIMBOT =====
+local CurrentTarget = nil
+
 local function GetClosestPlayer()
     local Closest, MaxDist = nil, Settings.Aimbot.FOV
     for _, v in pairs(Players:GetPlayers()) do
         if v ~= LocalPlayer and v.Character then
-            local TargetPart = v.Character:FindFirstChild(Settings.Aimbot.TargetPart) or v.Character.PrimaryPart
-            local Hum = v.Character:FindFirstChild("Humanoid")
-            if TargetPart and Hum and Hum.Health > 0 then
-                local ScreenPos, OnScreen = Camera:WorldToViewportPoint(TargetPart.Position)
-                if OnScreen and (not Settings.Aimbot.WallCheck or IsVisible(TargetPart)) then
-                    local MouseDist = (Vector2.new(ScreenPos.X, ScreenPos.Y) - UserInputService:GetMouseLocation()).Magnitude
-                    if MouseDist < MaxDist then MaxDist = MouseDist; Closest = TargetPart end
+            -- Team Check
+            local isTeammate = false
+            if Settings.Aimbot.TeamCheck and v.Team == LocalPlayer.Team then isTeammate = true end
+            
+            if not isTeammate then
+                local TargetPart = v.Character:FindFirstChild(Settings.Aimbot.TargetPart) or v.Character.PrimaryPart
+                local Hum = v.Character:FindFirstChild("Humanoid")
+                if TargetPart and Hum and Hum.Health > 0 then
+                    local ScreenPos, OnScreen = Camera:WorldToViewportPoint(TargetPart.Position)
+                    if OnScreen and (not Settings.Aimbot.WallCheck or IsVisible(TargetPart)) then
+                        local MouseDist = (Vector2.new(ScreenPos.X, ScreenPos.Y) - UserInputService:GetMouseLocation()).Magnitude
+                        if MouseDist < MaxDist then MaxDist = MouseDist; Closest = TargetPart end
+                    end
                 end
             end
         end
@@ -101,7 +112,19 @@ end))
 
 table.insert(Connections, RunService.RenderStepped:Connect(function()
     if Settings.Aimbot.Enabled and Aiming then
-        local TargetPart = GetClosestPlayer()
+        -- Target Lock: Kalau lagi ada target & fitur lock nyala, jangan ganti target
+        if Settings.Aimbot.Lock and CurrentTarget and CurrentTarget.Parent then
+            local Hum = CurrentTarget.Parent:FindFirstChild("Humanoid")
+            if Hum and Hum.Health > 0 then
+                -- Tetap pakai target lama
+            else
+                CurrentTarget = GetClosestPlayer()
+            end
+        else
+            CurrentTarget = GetClosestPlayer()
+        end
+        
+        local TargetPart = CurrentTarget
         if TargetPart then
             if Settings.Aimbot.Method == "Camera" then
                 local TargetCFrame = CFrame.new(Camera.CFrame.Position, TargetPart.Position)
@@ -117,6 +140,8 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
                 end
             end
         end
+    else
+        CurrentTarget = nil -- Reset kalau gak nembak
     end
 end))
 
@@ -124,10 +149,13 @@ table.insert(Connections, UserInputService.InputBegan:Connect(function(I)
     if matchKeybind(I, Settings.Aimbot.Key) then Aiming = true end
 end))
 table.insert(Connections, UserInputService.InputEnded:Connect(function(I)
-    if matchKeybind(I, Settings.Aimbot.Key) then Aiming = false end
+    if matchKeybind(I, Settings.Aimbot.Key) then 
+        Aiming = false 
+        CurrentTarget = nil -- Lepas lock saat tombol dilepas
+    end
 end))
 
--- ===== ESP (Kita punya) =====
+-- ===== ESP =====
 local function CreateESP(player)
     if ESP_Cache[player] then return end
     local cache = {}
@@ -174,6 +202,11 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
                         if Settings.Visuals.ColorMode == "Health" then col = Color3.fromHSV((hum.Health/hum.MaxHealth)*0.3, 1, 1)
                         elseif Settings.Visuals.ColorMode == "Team" and p.Team then col = p.TeamColor.Color end
                         
+                        -- Team Check buat ESP juga
+                        if Settings.Aimbot.TeamCheck and p.Team == LocalPlayer.Team then
+                            col = Color3.fromRGB(0, 255, 0) -- Tim sendiri warna hijau
+                        end
+                        
                         if Settings.Visuals.Names and onScreen and cache.Name then
                             cache.Name.Visible = true; cache.Name.Text = p.Name; cache.Name.Color = col
                             cache.Name.Size = Settings.Visuals.TextSize; cache.Name.Position = Vector2.new(headPos.X, headPos.Y)
@@ -204,7 +237,7 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
     end
 end))
 
--- ===== SELF MODS (Kita punya) =====
+-- ===== SELF MODS (FIXED FLY) =====
 table.insert(Connections, RunService.Stepped:Connect(function()
     if Settings.Self.Noclip and LocalPlayer.Character then
         for _, p in pairs(LocalPlayer.Character:GetDescendants()) do
@@ -229,101 +262,50 @@ table.insert(Connections, UserInputService.JumpRequest:Connect(function()
     end
 end))
 
+-- Fly Logic (Diperbaiki: pakai BodyVelocity + PlatformStand)
 table.insert(Connections, RunService.RenderStepped:Connect(function()
-    if Settings.Self.Fly then
-        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            local move = Vector3.new()
-            if UserInputService:IsKeyDown(Enum.KeyCode.W) then move = move + Camera.CFrame.LookVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.S) then move = move - Camera.CFrame.LookVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.A) then move = move - Camera.CFrame.RightVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.D) then move = move + Camera.CFrame.RightVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move = move + Vector3.new(0,1,0) end
-            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then move = move - Vector3.new(0,1,0) end
-            hrp.Velocity = move.Magnitude > 0 and move.Unit * Settings.Self.FlySpeed or Vector3.new(0, 0.1, 0)
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChild("Humanoid")
+    
+    if Settings.Self.Fly and hrp and hum then
+        -- Set PlatformStand biar karakter gak ngelawan physics
+        if not hum.PlatformStand then hum.PlatformStand = true end
+        
+        if not FlyBodyVelocity or FlyBodyVelocity.Parent ~= hrp then
+            if FlyBodyVelocity then FlyBodyVelocity:Destroy() end
+            FlyBodyVelocity = Instance.new("BodyVelocity")
+            FlyBodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            FlyBodyVelocity.Velocity = Vector3.new(0,0,0)
+            FlyBodyVelocity.Parent = hrp
         end
+        
+        local move = Vector3.new()
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then move = move + Camera.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then move = move - Camera.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then move = move - Camera.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then move = move + Camera.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move = move + Vector3.new(0,1,0) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then move = move - Vector3.new(0,1,0) end
+        
+        if move.Magnitude > 0 then
+            FlyBodyVelocity.Velocity = move.Unit * Settings.Self.FlySpeed
+        else
+            -- Diam total (gak goyang)
+            FlyBodyVelocity.Velocity = Vector3.new(0,0,0)
+        end
+    else
+        -- Matikan fly
+        if FlyBodyVelocity then FlyBodyVelocity:Destroy(); FlyBodyVelocity = nil end
+        if hum and hum.PlatformStand then hum.PlatformStand = false end
     end
 end))
 
--- ===== RAYFIELD UI =====
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-local Window = Rayfield:CreateWindow({
-    Name = "Antibys Universal",
-    LoadingTitle = "Antibys Engine", LoadingSubtitle = "by Operator",
-    ConfigurationSaving = {Enabled = false}, KeySystem = false
-})
-
--- ===== TAB TOOLS: 100% KODE ACIVENNA (TANPA MODIFIKASI) =====
-local UtilityTab = Window:CreateTab("Tools", "wrench")
-UtilityTab:CreateSection("Tool Grabber")
-
--- [KODE ACIVENNA ASLI]
-UtilityTab:CreateButton({
-    Name = "Steal Tools Once",
-    Callback = function()
-        pcall(function()
-            local char = LocalPlayer.Character
-            if not char then return end
-            
-            local found = false
-            for _, obj in pairs(Workspace:GetDescendants()) do
-                if obj:IsA("Tool") and obj:FindFirstChild("Handle") then
-                    local parent = obj.Parent
-                    if parent == Workspace or parent:IsA("Folder") or (parent:IsA("Model") and not Players:GetPlayerFromCharacter(parent)) then
-                        found = true
-                        -- Panggil fungsi GrabToolInstant dari Acivenna
-                        local hrp = char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
-                        local handle = obj:FindFirstChild("Handle")
-                        if hrp and handle then
-                            if firetouchinterest then
-                                firetouchinterest(hrp, handle, 0)
-                                task.wait()
-                                firetouchinterest(hrp, handle, 1)
-                            else
-                                local origCFrame = hrp.CFrame
-                                local startTime = tick()
-                                local steerConnection = RunService.Stepped:Connect(function()
-                                    for _, part in pairs(char:GetDescendants()) do
-                                        if part:IsA("BasePart") then part.CanCollide = false end
-                                    end
-                                end)
-                                while obj.Parent ~= char and obj.Parent ~= LocalPlayer:FindFirstChild("Backpack") and (tick() - startTime < 0.5) do
-                                    hrp.CFrame = handle.CFrame
-                                    task.wait(0.01)
-                                end
-                                steerConnection:Disconnect()
-                                hrp.CFrame = origCFrame
-                            end
-                        end
-                    end
-                end
-            end
-            
-            if found then
-                Rayfield:Notify({Title = "Tool Stealer", Content = "Collected loose tools!", Duration = 3})
-            else
-                Rayfield:Notify({Title = "Tool Stealer", Content = "No loose tools found.", Duration = 3})
-            end
-        end)
-    end
-})
-
-UtilityTab:CreateToggle({
-    Name = "Auto Steal Tools",
-    CurrentValue = false,
-    Callback = function(state)
-        AutoStealActive = state
-    end
-})
-
-UtilityTab:CreateSection("Tool Cloner / Giver")
-
+-- ===== ACIVENNA UTILITY (100% COPY) =====
 local gameToolObjects = {}
-
 local function GetGameTools()
     local tools = {}
     local toolObjects = {}
-    
     for _, service in pairs(game:GetChildren()) do
         pcall(function()
             for _, v in pairs(service:GetDescendants()) do
@@ -332,12 +314,10 @@ local function GetGameTools()
                     local parent = v.Parent
                     while parent do
                         if parent == LocalPlayer or parent == LocalPlayer:FindFirstChild("Backpack") or (LocalPlayer.Character and parent == LocalPlayer.Character) then
-                            isLocal = true
-                            break
+                            isLocal = true; break
                         end
                         parent = parent.Parent
                     end
-                    
                     if not isLocal then
                         if not toolObjects[v.Name] then
                             toolObjects[v.Name] = v
@@ -348,70 +328,38 @@ local function GetGameTools()
             end
         end)
     end
-    
     table.sort(tools)
-    if #tools == 0 then
-        table.insert(tools, "No tools found (Scan again)")
-    end
+    if #tools == 0 then table.insert(tools, "No tools found (Scan again)") end
     return tools, toolObjects
 end
 
-local ToolDropdown
-ToolDropdown = UtilityTab:CreateDropdown({
-    Name = "Select Tool to Clone",
-    Options = {"Scan to load tools..."},
-    CurrentOption = {},
-    MultipleOptions = false,
-    Callback = function(Option)
-        local toolName = Option[1]
-        local toolObj = gameToolObjects[toolName]
-        if toolObj and toolName ~= "No tools found (Scan again)" then
-            pcall(function()
-                local clone = toolObj:Clone()
-                clone.Parent = LocalPlayer:WaitForChild("Backpack")
-                
-                task.spawn(function()
-                    for _, s in pairs(clone:GetDescendants()) do
-                        if s:IsA("LocalScript") then
-                            s.Disabled = true
-                            task.wait(0.02)
-                            s.Disabled = false
-                        elseif s:IsA("Script") then
-                            pcall(function()
-                                s.RunContext = Enum.RunContext.Client
-                            end)
-                            s.Disabled = true
-                            task.wait(0.02)
-                            s.Disabled = false
-                        end
-                    end
-                end)
-                
-                Rayfield:Notify({Title = "Tool Cloner", Content = "Cloned " .. toolName .. " with active scripts!", Duration = 3})
-            end)
-        end
-    end,
-})
-
-UtilityTab:CreateButton({
-    Name = "Scan & Update Tool List",
-    Callback = function()
-        local tools, objects = GetGameTools()
-        gameToolObjects = objects
-        pcall(function()
-            if ToolDropdown then
-                if ToolDropdown.Refresh then
-                    ToolDropdown:Refresh(tools)
-                elseif ToolDropdown.Set then
-                    ToolDropdown:Set(tools)
+local function GrabToolInstant(tool)
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart") or char and char.PrimaryPart
+    local handle = tool:FindFirstChild("Handle")
+    if hrp and handle then
+        if firetouchinterest then
+            firetouchinterest(hrp, handle, 0)
+            task.wait()
+            firetouchinterest(hrp, handle, 1)
+        else
+            local origCFrame = hrp.CFrame
+            local startTime = tick()
+            local steerConnection = RunService.Stepped:Connect(function()
+                for _, part in pairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") then part.CanCollide = false end
                 end
+            end)
+            while tool.Parent ~= char and tool.Parent ~= LocalPlayer:FindFirstChild("Backpack") and (tick() - startTime < 0.5) do
+                hrp.CFrame = handle.CFrame
+                task.wait(0.01)
             end
-        end)
-        Rayfield:Notify({Title = "Tool Scanner", Content = "Scanned game: Found " .. tostring(#tools) .. " tool templates!", Duration = 3})
+            steerConnection:Disconnect()
+            hrp.CFrame = origCFrame
+        end
     end
-})
+end
 
--- Auto Steal Loop (Acivenna asli, pakai AutoStealActive dari atas)
 task.spawn(function()
     while true do
         task.wait(0.3)
@@ -419,35 +367,12 @@ task.spawn(function()
             pcall(function()
                 local char = LocalPlayer.Character
                 if not char then return end
-                
                 for _, obj in pairs(Workspace:GetDescendants()) do
                     if not AutoStealActive then break end
                     if obj:IsA("Tool") and obj:FindFirstChild("Handle") then
                         local parent = obj.Parent
                         if parent == Workspace or parent:IsA("Folder") or (parent:IsA("Model") and not Players:GetPlayerFromCharacter(parent)) then
-                            local hrp = char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
-                            local handle = obj:FindFirstChild("Handle")
-                            if hrp and handle then
-                                if firetouchinterest then
-                                    firetouchinterest(hrp, handle, 0)
-                                    task.wait()
-                                    firetouchinterest(hrp, handle, 1)
-                                else
-                                    local origCFrame = hrp.CFrame
-                                    local startTime = tick()
-                                    local steerConnection = RunService.Stepped:Connect(function()
-                                        for _, part in pairs(char:GetDescendants()) do
-                                            if part:IsA("BasePart") then part.CanCollide = false end
-                                        end
-                                    end)
-                                    while obj.Parent ~= char and obj.Parent ~= LocalPlayer:FindFirstChild("Backpack") and (tick() - startTime < 0.5) do
-                                        hrp.CFrame = handle.CFrame
-                                        task.wait(0.01)
-                                    end
-                                    steerConnection:Disconnect()
-                                    hrp.CFrame = origCFrame
-                                end
-                            end
+                            GrabToolInstant(obj)
                             task.wait(0.05)
                         end
                     end
@@ -457,6 +382,76 @@ task.spawn(function()
     end
 end)
 
+-- ===== RAYFIELD UI =====
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local Window = Rayfield:CreateWindow({
+    Name = "Antibys Universal",
+    LoadingTitle = "Antibys Engine", LoadingSubtitle = "by Operator",
+    ConfigurationSaving = {Enabled = false}, KeySystem = false
+})
+
+-- Tab: Tools (Acivenna Utility)
+local ToolsTab = Window:CreateTab("Tools", "package")
+ToolsTab:CreateSection("Tool Grabber")
+ToolsTab:CreateButton({
+    Name = "Steal Tools Once",
+    Callback = function()
+        pcall(function()
+            local char = LocalPlayer.Character
+            if not char then return end
+            local found = false
+            for _, obj in pairs(Workspace:GetDescendants()) do
+                if obj:IsA("Tool") and obj:FindFirstChild("Handle") then
+                    local parent = obj.Parent
+                    if parent == Workspace or parent:IsA("Folder") or (parent:IsA("Model") and not Players:GetPlayerFromCharacter(parent)) then
+                        found = true
+                        GrabToolInstant(obj)
+                    end
+                end
+            end
+            Rayfield:Notify({Title = "Tool Stealer", Content = found and "Collected loose tools!" or "No loose tools found.", Duration = 3})
+        end)
+    end
+})
+ToolsTab:CreateToggle({
+    Name = "Auto Steal Tools",
+    CurrentValue = false,
+    Callback = function(state) AutoStealActive = state end
+})
+ToolsTab:CreateSection("Tool Cloner / Giver")
+local ToolDropdown
+ToolDropdown = ToolsTab:CreateDropdown({
+    Name = "Select Tool to Clone",
+    Options = {"Scan to load tools..."},
+    CurrentOption = {}, MultipleOptions = false,
+    Callback = function(Option)
+        local toolName = Option[1]
+        local toolObj = gameToolObjects[toolName]
+        if toolObj and toolName ~= "No tools found (Scan again)" then
+            pcall(function()
+                local clone = toolObj:Clone()
+                clone.Parent = LocalPlayer:WaitForChild("Backpack")
+                task.spawn(function()
+                    for _, s in pairs(clone:GetDescendants()) do
+                        if s:IsA("LocalScript") then s.Disabled = true; task.wait(0.02); s.Disabled = false
+                        elseif s:IsA("Script") then pcall(function() s.RunContext = Enum.RunContext.Client end); s.Disabled = true; task.wait(0.02); s.Disabled = false end
+                    end
+                end)
+                Rayfield:Notify({Title = "Tool Cloner", Content = "Cloned " .. toolName .. " with active scripts!", Duration = 3})
+            end)
+        end
+    end,
+})
+ToolsTab:CreateButton({
+    Name = "Scan & Update Tool List",
+    Callback = function()
+        local tools, objects = GetGameTools()
+        gameToolObjects = objects
+        pcall(function() if ToolDropdown then if ToolDropdown.Refresh then ToolDropdown:Refresh(tools) elseif ToolDropdown.Set then ToolDropdown:Set(tools) end end end)
+        Rayfield:Notify({Title = "Tool Scanner", Content = "Scanned game: Found " .. tostring(#tools) .. " tool templates!", Duration = 3})
+    end
+})
+
 -- Tab: Aimbot
 local AimTab = Window:CreateTab("Aimbot", "crosshair")
 AimTab:CreateSection("Aimbot Engine")
@@ -464,6 +459,8 @@ AimTab:CreateToggle({Name = "Aimbot Enabled", CurrentValue = false, Callback = f
 AimTab:CreateDropdown({Name = "Method", Options = {"Camera", "Mouse"}, CurrentOption = {"Camera"}, Callback = function(O) Settings.Aimbot.Method = O[1] end})
 AimTab:CreateDropdown({Name = "Target Part", Options = {"Head", "HumanoidRootPart"}, CurrentOption = {"Head"}, Callback = function(O) Settings.Aimbot.TargetPart = O[1] end})
 AimTab:CreateToggle({Name = "Wall Check", CurrentValue = true, Callback = function(s) Settings.Aimbot.WallCheck = s end})
+AimTab:CreateToggle({Name = "Team Check (Skip Teammates)", CurrentValue = true, Callback = function(s) Settings.Aimbot.TeamCheck = s end}) -- BARU
+AimTab:CreateToggle({Name = "Target Lock (Stay on Target)", CurrentValue = true, Callback = function(s) Settings.Aimbot.Lock = s end}) -- BARU
 AimTab:CreateToggle({Name = "Instant Snap", CurrentValue = false, Callback = function(s) Settings.Aimbot.InstantSnap = s end})
 AimTab:CreateSlider({Name = "Smoothness", Range = {1, 30}, Increment = 1, CurrentValue = 2, Callback = function(v) Settings.Aimbot.Smoothness = v end})
 AimTab:CreateToggle({Name = "Show FOV", CurrentValue = true, Callback = function(s) Settings.Aimbot.ShowFOV = s end})
@@ -497,7 +494,7 @@ SelfTab:CreateSlider({Name = "WalkSpeed", Range = {16, 300}, Increment = 1, Curr
 SelfTab:CreateSlider({Name = "JumpPower", Range = {50, 500}, Increment = 5, CurrentValue = 50, Callback = function(v) Settings.Self.JumpPower = v end})
 SelfTab:CreateToggle({Name = "Infinite Jump", CurrentValue = false, Callback = function(s) Settings.Self.InfiniteJump = s end})
 SelfTab:CreateToggle({Name = "Noclip", CurrentValue = false, Callback = function(s) Settings.Self.Noclip = s end})
-SelfTab:CreateToggle({Name = "Fly", CurrentValue = false, Callback = function(s) Settings.Self.Fly = s end})
+SelfTab:CreateToggle({Name = "Fly (Fixed)", CurrentValue = false, Callback = function(s) Settings.Self.Fly = s end}) -- UDAH FIX
 SelfTab:CreateSlider({Name = "Fly Speed", Range = {10, 300}, Increment = 5, CurrentValue = 50, Callback = function(v) Settings.Self.FlySpeed = v end})
 
-Rayfield:Notify({Title = "Antibys Universal", Content = "Loaded. Utility = Acivenna Original.", Duration = 5})
+Rayfield:Notify({Title = "Antibys Universal", Content = "Update: Fly Fixed + Team Check + Target Lock.", Duration = 5})
